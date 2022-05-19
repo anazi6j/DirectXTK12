@@ -26,7 +26,7 @@
 
 #include "RenderTargetState.h"
 #include "EffectPipelineStateDescription.h"
-
+#include "TesselationEffectPipelineDescription.h"
 
 namespace DirectX
 {
@@ -178,6 +178,7 @@ namespace DirectX
     {
     public:
         BasicEffect(_In_ ID3D12Device* device, uint32_t effectFlags, const EffectPipelineStateDescription& pipelineDescription);
+        BasicEffect(_In_ ID3D12Device* device, uint32_t effectFlags, const TesselationEffectPipelineDescription& pipelineDescription);
 
         BasicEffect(BasicEffect&&) noexcept;
         BasicEffect& operator= (BasicEffect&&) noexcept;
@@ -189,7 +190,8 @@ namespace DirectX
 
         // IEffect methods.
         void __cdecl Apply(_In_ ID3D12GraphicsCommandList* commandList) override;
-
+        void __cdecl Apply_Any_RS_PSO(_In_ ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* in_RootSignature,
+            ID3D12PipelineState* in_PSO);
         // Camera settings.
         void XM_CALLCONV SetWorld(FXMMATRIX value) override;
         void XM_CALLCONV SetView(FXMMATRIX value) override;
@@ -249,6 +251,7 @@ namespace DirectX
 
         // IEffect methods.
         void __cdecl Apply(_In_ ID3D12GraphicsCommandList* commandList) override;
+        
 
         // Camera settings.
         void XM_CALLCONV SetWorld(FXMMATRIX value) override;

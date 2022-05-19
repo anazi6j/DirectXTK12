@@ -22,6 +22,9 @@
     <Filter Include="Src\Shaders\Shared">
       <UniqueIdentifier>{748d343b-b201-4335-958e-d5457382f87b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Extend">
+      <UniqueIdentifier>{f580fedc-3207-40f2-bff8-2d290d03b2f2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Inc\CommonStates.h">
@@ -150,6 +153,7 @@
     <ClInclude Include="Inc\BufferHelpers.h">
       <Filter>Inc</Filter>
     </ClInclude>
+    <ClInclude Include="TesselationEffectPipelineDescription.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Src\Shaders\CompileShaders.cmd">
@@ -377,5 +381,6 @@
     <ClCompile Include="Src\ModelLoadCMO.cpp">
       <Filter>Src</Filter>
     </ClCompile>
+    <ClCompile Include="TesselationEffectPipelineDescription.cpp" />
   </ItemGroup>
 </Project>

@@ -10,6 +10,8 @@
 #include "pch.h"
 #include "EffectCommon.h"
 
+#include "TesselationEffectPipelineDescription.h"
+#include <d3dcompiler.h>
 using namespace DirectX;
 
 namespace
@@ -41,6 +43,7 @@ namespace
     // Traits type describes our characteristics to the EffectBase template.
     struct BasicEffectTraits
     {
+        BasicEffectTraits() {};
         using ConstantBufferType = BasicEffectConstants;
 
         static constexpr int VertexShaderCount = 24;
@@ -54,8 +57,13 @@ namespace
 class BasicEffect::Impl : public EffectBase<BasicEffectTraits>
 {
 public:
+    
+    Impl() {};
     Impl(_In_ ID3D12Device* device, uint32_t effectFlags, const EffectPipelineStateDescription& pipelineDescription);
-
+    Impl(
+        _In_ ID3D12Device* device,
+        uint32_t effectFlags,
+        const TesselationEffectPipelineDescription& pipelineDescription);
     enum RootParameterIndex
     {
         ConstantBuffer,
@@ -75,6 +83,8 @@ public:
     int GetPipelineStatePermutation(uint32_t effectFlags) const noexcept;
 
     void Apply(_In_ ID3D12GraphicsCommandList* commandList);
+    void Apply_Any_RS_PSO(_In_ ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* in_RootSignature, 
+   ID3D12PipelineState* in_PSO);
 };
 
 
@@ -411,6 +421,7 @@ template<>
 SharedResourcePool<ID3D12Device*, EffectBase<BasicEffectTraits>::DeviceResources> EffectBase<BasicEffectTraits>::deviceResourcesPool = {};
 
 
+
 // Constructor.
 BasicEffect::Impl::Impl(
     _In_ ID3D12Device* device,
@@ -494,9 +505,107 @@ BasicEffect::Impl::Impl(
         mRootSignature,
         EffectBase<BasicEffectTraits>::VertexShaderBytecode[vi],
         EffectBase<BasicEffectTraits>::PixelShaderBytecode[pi],
+
         mPipelineState.GetAddressOf());
 
     SetDebugObjectName(mPipelineState.Get(), L"BasicEffect");
+}
+
+BasicEffect::Impl::Impl(
+    _In_ ID3D12Device* device,
+    uint32_t effectFlags,
+    const TesselationEffectPipelineDescription& pipelineDescription)
+{
+    static_assert(static_cast<int>(std::size(EffectBase<BasicEffectTraits>::VertexShaderIndices)) == BasicEffectTraits::ShaderPermutationCount, "array/max mismatch");
+    static_assert(static_cast<int>(std::size(EffectBase<BasicEffectTraits>::VertexShaderBytecode)) == BasicEffectTraits::VertexShaderCount, "array/max mismatch");
+    static_assert(static_cast<int>(std::size(EffectBase<BasicEffectTraits>::PixelShaderBytecode)) == BasicEffectTraits::PixelShaderCount, "array/max mismatch");
+    static_assert(static_cast<int>(std::size(EffectBase<BasicEffectTraits>::PixelShaderIndices)) == BasicEffectTraits::ShaderPermutationCount, "array/max mismatch");
+
+    if (effectFlags & EffectFlags::Instancing)
+    {
+        DebugTrace("ERROR: BasicEffect does not implement EffectFlags::Instancing\n");
+        throw std::invalid_argument("Instancing effect flag is invalid");
+    }
+
+    lights.InitializeConstants(constants.specularColorAndPower, constants.lightDirection, constants.lightDiffuseColor, constants.lightSpecularColor);
+
+    fog.enabled = (effectFlags & EffectFlags::Fog) != 0;
+    lightingEnabled = (effectFlags & EffectFlags::Lighting) != 0;
+    textureEnabled = (effectFlags & EffectFlags::Texture) != 0;
+
+    // Create root signature.
+    {
+        ENUM_FLAGS_CONSTEXPR D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
+            | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+            | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
+            | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS;
+
+        // Create root parameters and initialize first (constants)
+        CD3DX12_ROOT_PARAMETER rootParameters[RootParameterIndex::RootParameterCount] = {};
+        rootParameters[RootParameterIndex::ConstantBuffer].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
+
+        // Root parameter descriptor - conditionally initialized
+        CD3DX12_ROOT_SIGNATURE_DESC rsigDesc = {};
+
+        if (textureEnabled)
+        {
+            // Include texture and srv
+            const CD3DX12_DESCRIPTOR_RANGE textureSRV(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+            const CD3DX12_DESCRIPTOR_RANGE textureSampler(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0);
+
+            rootParameters[RootParameterIndex::TextureSRV].InitAsDescriptorTable(1, &textureSRV, D3D12_SHADER_VISIBILITY_PIXEL);
+            rootParameters[RootParameterIndex::TextureSampler].InitAsDescriptorTable(1, &textureSampler, D3D12_SHADER_VISIBILITY_PIXEL);
+
+            // use all parameters
+            rsigDesc.Init(static_cast<UINT>(std::size(rootParameters)), rootParameters, 0, nullptr, rootSignatureFlags);
+
+            mRootSignature = GetRootSignature(1, rsigDesc);
+        }
+        else
+        {
+            // only use constant
+            rsigDesc.Init(1, rootParameters, 0, nullptr, rootSignatureFlags);
+
+            mRootSignature = GetRootSignature(0, rsigDesc);
+        }
+    }
+
+    assert(mRootSignature != nullptr);
+
+    // Create pipeline state.
+    const int sp = GetPipelineStatePermutation(effectFlags);
+    assert(sp >= 0 && sp < BasicEffectTraits::ShaderPermutationCount);
+    _Analysis_assume_(sp >= 0 && sp < BasicEffectTraits::ShaderPermutationCount);
+
+    const int vi = EffectBase<BasicEffectTraits>::VertexShaderIndices[sp];
+    assert(vi >= 0 && vi < BasicEffectTraits::VertexShaderCount);
+    _Analysis_assume_(vi >= 0 && vi < BasicEffectTraits::VertexShaderCount);
+    const int pi = EffectBase<BasicEffectTraits>::PixelShaderIndices[sp];
+    assert(pi >= 0 && pi < BasicEffectTraits::PixelShaderCount);
+    _Analysis_assume_(pi >= 0 && pi < BasicEffectTraits::PixelShaderCount);
+    Microsoft::WRL::ComPtr<ID3DBlob> hullshader = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> hullshadererror = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> domainshader = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> domainshadererror = nullptr;
+    auto hullresult = D3DCompileFromFile(L"HSterrein.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "mainHS", "hs_6_0", D3DCOMPILE_DEBUG, 0, &hullshader,
+        &hullshadererror);
+    auto domainresult = D3DCompileFromFile(L"DSterrein.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "mainDS", "ds_6_0", D3DCOMPILE_DEBUG, 0, &hullshader,
+        &hullshadererror);
+    CD3DX12_SHADER_BYTECODE patchDS(domainshader.Get());
+    CD3DX12_SHADER_BYTECODE patchHS(hullshader.Get());
+    pipelineDescription.CreatePipelineState(
+        device,
+        mRootSignature,
+        EffectBase<BasicEffectTraits>::VertexShaderBytecode[vi],
+        EffectBase<BasicEffectTraits>::PixelShaderBytecode[pi],
+        patchHS,
+        patchDS,
+        mPipelineState.GetAddressOf());
+
+    SetDebugObjectName(mPipelineState.Get(), L"BasicEffect");
+
+
 }
 
 
@@ -579,12 +688,57 @@ void BasicEffect::Impl::Apply(_In_ ID3D12GraphicsCommandList* commandList)
     commandList->SetPipelineState(EffectBase::mPipelineState.Get());
 }
 
+// Sets our state onto the D3D device.
+void BasicEffect::Impl::Apply_Any_RS_PSO(_In_ ID3D12GraphicsCommandList* commandList,ID3D12RootSignature* in_RootSignature,
+    ID3D12PipelineState* in_PSO)
+{
+    // Compute derived parameter values.
+    matrices.SetConstants(dirtyFlags, constants.worldViewProj);
+    fog.SetConstants(dirtyFlags, matrices.worldView, constants.fogVector);
+    lights.SetConstants(dirtyFlags, matrices, constants.world, constants.worldInverseTranspose, constants.eyePosition, constants.diffuseColor, constants.emissiveColor, lightingEnabled);
+
+    UpdateConstants();
+
+    // Set the root signature
+    commandList->SetGraphicsRootSignature(in_RootSignature);
+
+    // Set the texture
+    if (textureEnabled)
+    {
+        if (!texture.ptr || !sampler.ptr)
+        {
+            DebugTrace("ERROR: Missing texture or sampler for BasicEffect (texture %llu, sampler %llu)\n", texture.ptr, sampler.ptr);
+            throw std::runtime_error("BasicEffect");
+        }
+
+        // **NOTE** If D3D asserts or crashes here, you probably need to call commandList->SetDescriptorHeaps() with the required descriptor heaps.
+        commandList->SetGraphicsRootDescriptorTable(RootParameterIndex::TextureSRV, texture);
+        commandList->SetGraphicsRootDescriptorTable(RootParameterIndex::TextureSampler, sampler);
+    }
+
+    // Set constants
+    commandList->SetGraphicsRootConstantBufferView(RootParameterIndex::ConstantBuffer, GetConstantBufferGpuAddress());
+
+    // Set the pipeline state
+    commandList->SetPipelineState(in_PSO);
+}
+
+
 
 // Public constructor.
 BasicEffect::BasicEffect(
     _In_ ID3D12Device* device,
     uint32_t effectFlags,
     const EffectPipelineStateDescription& pipelineDescription)
+    : pImpl(std::make_unique<Impl>(device, effectFlags, pipelineDescription))
+{
+}
+
+// Public constructor.
+BasicEffect::BasicEffect(
+    _In_ ID3D12Device* device,
+    uint32_t effectFlags,
+    const TesselationEffectPipelineDescription& pipelineDescription)
     : pImpl(std::make_unique<Impl>(device, effectFlags, pipelineDescription))
 {
 }
@@ -602,6 +756,12 @@ void BasicEffect::Apply(_In_ ID3D12GraphicsCommandList* commandList)
     pImpl->Apply(commandList);
 }
 
+
+void BasicEffect::Apply_Any_RS_PSO(_In_ ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* in_RootSignature,
+    ID3D12PipelineState* in_PSO)
+{
+    pImpl->Apply_Any_RS_PSO(commandList, in_RootSignature, in_PSO);
+}
 
 // Camera settings
 void XM_CALLCONV BasicEffect::SetWorld(FXMMATRIX value)

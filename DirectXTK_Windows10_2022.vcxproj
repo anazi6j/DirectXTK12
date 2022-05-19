@@ -77,6 +77,7 @@
     <ClInclude Include="Src\SDKMesh.h" />
     <ClInclude Include="Src\SharedResourcePool.h" />
     <ClInclude Include="Src\vbo.h" />
+    <ClInclude Include="TesselationEffectPipelineDescription.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Inc\SimpleMath.inl" />
@@ -153,6 +154,7 @@
     <ClCompile Include="Src\ToneMapPostProcess.cpp" />
     <ClCompile Include="Src\VertexTypes.cpp" />
     <ClCompile Include="Src\WICTextureLoader.cpp" />
+    <ClCompile Include="TesselationEffectPipelineDescription.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Src\Shaders\AlphaTestEffect.fx">

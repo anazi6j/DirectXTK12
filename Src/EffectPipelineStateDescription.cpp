@@ -84,6 +84,8 @@ uint32_t EffectPipelineStateDescription::ComputeHash() const noexcept
 }
 
 
+
+
 void EffectPipelineStateDescription::CreatePipelineState(
     _In_ ID3D12Device* device,
     _In_ ID3D12RootSignature* rootSignature,
@@ -95,7 +97,7 @@ void EffectPipelineStateDescription::CreatePipelineState(
     psoDesc.pRootSignature = rootSignature;
     psoDesc.VS = vertexShader;
     psoDesc.PS = pixelShader;
-
+    
     HRESULT hr = device->CreateGraphicsPipelineState(
         &psoDesc,
         IID_GRAPHICS_PPV_ARGS(pPipelineState));

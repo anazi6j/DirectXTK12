@@ -9,7 +9,7 @@
 
 #include "pch.h"
 #include "EffectCommon.h"
-
+#include <d3dcompiler.h>
 namespace DirectX
 {
     namespace EffectDirtyFlags
@@ -501,6 +501,16 @@ void NormalMapEffect::Impl::Initialize(
     const int pi = EffectBase<NormalMapEffectTraits>::PixelShaderIndices[sp];
     assert(pi >= 0 && pi < NormalMapEffectTraits::PixelShaderCount);
     _Analysis_assume_(pi >= 0 && pi < NormalMapEffectTraits::PixelShaderCount);
+    Microsoft::WRL::ComPtr<ID3DBlob> hullshader = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> hullshadererror = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> domainshader = nullptr;
+    Microsoft::WRL::ComPtr<ID3DBlob> domainshadererror = nullptr;
+    auto hullresult = D3DCompileFromFile(L"HSterrein.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "mainHS", "hs_6_0", D3DCOMPILE_DEBUG, 0, &hullshader,
+        &hullshadererror);
+    auto domainresult = D3DCompileFromFile(L"DSterrein.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "mainDS", "ds_6_0", D3DCOMPILE_DEBUG, 0, &hullshader,
+        &hullshadererror);
+    CD3DX12_SHADER_BYTECODE patchDS(domainshader.Get());
+    CD3DX12_SHADER_BYTECODE patchHS(hullshader.Get());
 
     pipelineDescription.CreatePipelineState(
         device,

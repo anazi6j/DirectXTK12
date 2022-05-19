@@ -26,9 +26,12 @@
 
 namespace DirectX
 {
+
     // Pipeline state information for creating effects.
     struct EffectPipelineStateDescription
     {
+    public:
+        EffectPipelineStateDescription() {}
         EffectPipelineStateDescription(
             _In_opt_ const D3D12_INPUT_LAYOUT_DESC* iinputLayout,
             const D3D12_BLEND_DESC& blend,

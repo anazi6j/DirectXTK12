@@ -164,6 +164,8 @@ private:
 SharedResourcePool<ID3D12Device*, DeviceResources> DualPostProcess::Impl::deviceResourcesPool;
 
 
+
+
 // Constructor.
 DualPostProcess::Impl::Impl(_In_ ID3D12Device* device, const RenderTargetState& rtState, Effect ifx)
     : fx(ifx),
